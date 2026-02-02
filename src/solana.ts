@@ -167,3 +167,28 @@ export async function sweepToTreasury(
 
   console.log(`🏦 Swept ${bal.value.uiAmount} to treasury`)
 }
+
+export async function getTreasuryBalances() {
+  const usdcATA = getAssociatedTokenAddressSync(
+    USDC_MINT,
+    treasuryKeypair.publicKey
+  )
+
+  const usdtATA = getAssociatedTokenAddressSync(
+    USDT_MINT,
+    treasuryKeypair.publicKey
+  )
+
+  const ssfATA = getAssociatedTokenAddressSync(
+    SSF_MINT,
+    treasuryKeypair.publicKey
+  )
+
+  const [usdc, usdt, ssf] = await Promise.all([
+    getTokenBalance(connection, usdcATA),
+    getTokenBalance(connection, usdtATA),
+    getTokenBalance(connection, ssfATA),
+  ])
+
+  return { usdc, usdt, ssf }
+}

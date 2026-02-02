@@ -1,13 +1,21 @@
 import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
 import { getSession, saveSession } from './state';
-import { deriveUserKeypair, getUserATAs, connection } from './solana'
+import { deriveUserKeypair, getUserATAs, connection, getTreasuryBalances } from './solana'
 
 import { startWatcher } from './watcher'
 
 import { PublicKey } from '@solana/web3.js'
 
+import { isPaused, pause, resume } from './admin'
+
 dotenv.config();
+
+const ADMIN_ID = Number(process.env.ADMIN_ID)
+
+function isAdmin(userId: number) {
+  return userId === ADMIN_ID
+}
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   throw new Error('Missing TELEGRAM_BOT_TOKEN');
@@ -56,6 +64,44 @@ Choose how you want to proceed 👇`,
 )
 });
 
+bot.onText(/\/pause/, async (msg) => {
+  if (!msg.from || !isAdmin(msg.from.id)) return
+
+  pause()
+  await bot.sendMessage(msg.chat.id, '⛔ Presale PAUSED')
+});
+
+bot.onText(/\/resume/, async (msg) => {
+  if (!msg.from || !isAdmin(msg.from.id)) return
+
+  resume()
+  await bot.sendMessage(msg.chat.id, '✅ Presale RESUMED')
+});
+
+bot.onText(/\/status/, async (msg) => {
+  if (!msg.from || !isAdmin(msg.from.id)) return
+
+  await bot.sendMessage(
+    msg.chat.id,
+    `Status: ${isPaused() ? '⛔ PAUSED' : '✅ LIVE'}`
+  )
+});
+
+bot.onText(/\/balance/, async (msg) => {
+    if (!msg.from || !isAdmin(msg.from.id)) return
+
+    const bal = await getTreasuryBalances()
+
+    await bot.sendMessage(
+        msg.chat.id,
+    `💰 Treasury
+    USDC: ${bal.usdc}
+    USDT: ${bal.usdt}
+    SSF: ${bal.ssf}`
+    )
+});
+
+
 // Button handler
 bot.on('callback_query', async (query) => {
   if (!query.message || !query.from) return;
@@ -65,6 +111,15 @@ bot.on('callback_query', async (query) => {
   const session = getSession(userId);
 
   if (query.data === 'BUY_SSF') {
+
+    if (isPaused()) {
+        await bot.sendMessage(
+        chatId,
+        '⛔ Presale is temporarily paused. Please try again later.'
+        )
+        return
+    }
+
     session.step = 'select_token';
 
     await bot.sendMessage(
