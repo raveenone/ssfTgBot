@@ -1,3 +1,5 @@
+import { db } from './db'
+
 export type TokenType = 'USDC' | 'USDT'
 
 export type SessionStep =
@@ -9,25 +11,50 @@ export type SessionStep =
 
 export type Session = {
   step: SessionStep
+
   depositAddress?: string
   tokenType?: TokenType
   amountUSD?: number
-
   payoutAddress?: string
 
   credited?: boolean
   lastCheckedBalance?: number
 }
 
-export const sessions = new Map<number, Session>()
+// ----------------------------------------
+// DB helpers
+// ----------------------------------------
 
 export function getSession(userId: number): Session {
-  if (!sessions.has(userId)) {
-    sessions.set(userId, { step: 'idle' })
+  const row = db
+    .prepare('SELECT data FROM sessions WHERE userId=?')
+    .get(String(userId)) as { data: string } | undefined
+
+  if (row) {
+    return JSON.parse(row.data)
   }
-  return sessions.get(userId)!
+
+  const session: Session = { step: 'idle' }
+  saveSession(userId, session)
+  return session
 }
 
-export function resetSession(userId: number) {
-  sessions.delete(userId)
+export function saveSession(userId: number, session: Session) {
+  db.prepare(`
+    INSERT OR REPLACE INTO sessions (userId, data)
+    VALUES (?, ?)
+  `).run(String(userId), JSON.stringify(session))
+}
+
+export function deleteSession(userId: number) {
+  db.prepare('DELETE FROM sessions WHERE userId=?')
+    .run(String(userId))
+}
+
+export function getAllSessions(): [number, Session][] {
+  const rows = db
+    .prepare('SELECT userId, data FROM sessions')
+    .all() as { userId: string; data: string }[]
+
+  return rows.map(r => [Number(r.userId), JSON.parse(r.data)])
 }

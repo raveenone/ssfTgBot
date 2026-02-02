@@ -1,15 +1,17 @@
 import { Connection, PublicKey } from '@solana/web3.js'
 import { getSession } from './state'
 import { deriveUserKeypair, getUserATAs, getTokenBalance, sendSSF, sweepToTreasury, USDC_MINT, USDT_MINT } from './solana'
-import { sessions } from './state'
+import { getAllSessions, saveSession  } from './state'
 
 const PRICE_PER_SSF = 0.25
 
 export function startWatcher(connection: Connection) {
   console.log('👀 Starting on-chain deposit watcher')
 
-  setInterval(async () => {
-    for (const [userId, session] of sessions) {
+  async function check() {
+    console.log('sessions loaded:', getAllSessions().length)
+
+    for (const [userId, session] of getAllSessions()) {
       if (session.step !== 'awaiting_payment') continue
       if (session.credited) continue
       if (!session.tokenType) continue
@@ -21,7 +23,6 @@ export function startWatcher(connection: Connection) {
         session.tokenType === 'USDC' ? atas.usdc : atas.usdt
 
       const balance = await getTokenBalance(connection, ata)
-
       const last = session.lastCheckedBalance ?? 0
 
       if (balance > last) {
@@ -29,25 +30,27 @@ export function startWatcher(connection: Connection) {
         const ssfAmount = delta / PRICE_PER_SSF
 
         console.log(
-            `💰 Deposit detected for user ${userId}: ${delta} ${session.tokenType}`
+          `💰 Deposit detected for user ${userId}: ${delta} ${session.tokenType}`
         )
 
-        await sendSSF(
-            new PublicKey(session.payoutAddress!),
-            ssfAmount
-        )
+        await sendSSF(new PublicKey(session.payoutAddress!), ssfAmount)
 
         await sweepToTreasury(
-            userKeypair,
-            session.tokenType === 'USDC' ? USDC_MINT : USDT_MINT,
-            6
+          userKeypair,
+          session.tokenType === 'USDC' ? USDC_MINT : USDT_MINT,
+          6
         )
 
         session.credited = true
         session.step = 'idle'
+        saveSession(userId, session)
       }
 
       session.lastCheckedBalance = balance
+      saveSession(userId, session)
     }
-  }, 15_000) // every 15s
+  }
+
+  check() // 🔥 immediate run
+  setInterval(check, 15_000)
 }

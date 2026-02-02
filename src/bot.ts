@@ -1,6 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
-import { getSession, resetSession } from './state';
+import { getSession, saveSession } from './state';
 import { deriveUserKeypair, getUserATAs, connection } from './solana'
 
 import { startWatcher } from './watcher'
@@ -32,6 +32,7 @@ bot.onText(/\/start/, async (msg) => {
   const session = getSession(userId)
   session.depositAddress = keypair.publicKey.toBase58()
   session.step = 'awaiting_payment'
+  saveSession(userId, session)
 
   await bot.sendMessage(
   chatId,
@@ -92,6 +93,7 @@ bot.on('callback_query', async (query) => {
   if (query.data === 'TOKEN_USDC' || query.data === 'TOKEN_USDT') {
     session.tokenType = query.data === 'TOKEN_USDC' ? 'USDC' : 'USDT';
     session.step = 'enter_amount';
+    saveSession(userId, session)
 
     await bot.sendMessage(
       chatId,
@@ -121,6 +123,7 @@ bot.on('message', async (msg) => {
 
     session.amountUSD = amount;
     session.step = 'enter_payout';
+    saveSession(userId, session)
 
     await bot.sendMessage(
       chatId,
@@ -144,6 +147,7 @@ bot.on('message', async (msg) => {
 
     session.payoutAddress = msg.text;
     session.step = 'awaiting_payment';
+    saveSession(userId, session)
 
     const ssfAmount = session.amountUSD! / 0.25;
 
