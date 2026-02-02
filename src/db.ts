@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 
-const db = new Database('sessions.db') // NOT exported
+const db = new Database('/data/sessions.db') // NOT exported
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS sessions (

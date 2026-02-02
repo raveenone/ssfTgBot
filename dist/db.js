@@ -7,7 +7,7 @@ exports.dbGet = dbGet;
 exports.dbAll = dbAll;
 exports.dbRun = dbRun;
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
-const db = new better_sqlite3_1.default('sessions.db'); // NOT exported
+const db = new better_sqlite3_1.default('/data/sessions.db'); // NOT exported
 db.exec(`
 CREATE TABLE IF NOT EXISTS sessions (
   userId TEXT PRIMARY KEY,
