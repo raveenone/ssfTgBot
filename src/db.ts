@@ -1,11 +1,26 @@
 import Database from 'better-sqlite3'
 
-export const db = new Database('sessions.db')
+const db = new Database('sessions.db') // NOT exported
 
-// simple key-value store
 db.exec(`
 CREATE TABLE IF NOT EXISTS sessions (
   userId TEXT PRIMARY KEY,
   data TEXT NOT NULL
 )
 `)
+
+// ---------------------------------
+// Safe wrappers
+// ---------------------------------
+
+export function dbGet(sql: string, ...params: any[]) {
+  return db.prepare(sql).get(...params)
+}
+
+export function dbAll(sql: string, ...params: any[]) {
+  return db.prepare(sql).all(...params)
+}
+
+export function dbRun(sql: string, ...params: any[]) {
+  return db.prepare(sql).run(...params)
+}

@@ -1,4 +1,4 @@
-import { db } from './db'
+import { dbGet, dbAll, dbRun } from './db'
 
 export type TokenType = 'USDC' | 'USDT'
 
@@ -26,9 +26,10 @@ export type Session = {
 // ----------------------------------------
 
 export function getSession(userId: number): Session {
-  const row = db
-    .prepare('SELECT data FROM sessions WHERE userId=?')
-    .get(String(userId)) as { data: string } | undefined
+  const row = dbGet(
+    'SELECT data FROM sessions WHERE userId=?',
+    String(userId)
+  ) as { data: string } | undefined
 
   if (row) {
     return JSON.parse(row.data)
@@ -40,21 +41,24 @@ export function getSession(userId: number): Session {
 }
 
 export function saveSession(userId: number, session: Session) {
-  db.prepare(`
-    INSERT OR REPLACE INTO sessions (userId, data)
-    VALUES (?, ?)
-  `).run(String(userId), JSON.stringify(session))
+  dbRun(
+    'INSERT OR REPLACE INTO sessions (userId, data) VALUES (?, ?)',
+    String(userId),
+    JSON.stringify(session)
+  )
 }
 
 export function deleteSession(userId: number) {
-  db.prepare('DELETE FROM sessions WHERE userId=?')
-    .run(String(userId))
+  dbRun(
+    'DELETE FROM sessions WHERE userId=?',
+    String(userId)
+  )
 }
 
 export function getAllSessions(): [number, Session][] {
-  const rows = db
-    .prepare('SELECT userId, data FROM sessions')
-    .all() as { userId: string; data: string }[]
+  const rows = dbAll(
+    'SELECT userId, data FROM sessions'
+  ) as { userId: string; data: string }[]
 
   return rows.map(r => [Number(r.userId), JSON.parse(r.data)])
 }
