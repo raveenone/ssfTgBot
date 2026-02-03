@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
 import { getSession, saveSession } from './state';
-import { deriveUserKeypair, getUserATAs, connection, getTreasuryBalances } from './solana'
+import { deriveUserKeypair, getUserATAs, connection, getTreasuryBalances, getTokenBalance, USDC_MINT, USDT_MINT } from './solana'
 
 import { startWatcher } from './watcher'
 
@@ -10,6 +10,10 @@ import { PublicKey } from '@solana/web3.js'
 import { isPaused, pause, resume } from './admin'
 
 dotenv.config();
+
+const ADMINS = new Set<number>([
+  6811113433, // ← your telegram id
+])
 
 const ADMIN_ID = Number(process.env.ADMIN_ID)
 
@@ -98,6 +102,68 @@ bot.onText(/\/balance/, async (msg) => {
     USDC: ${bal.usdc}
     USDT: ${bal.usdt}
     SSF: ${bal.ssf}`
+    )
+});
+
+bot.onText(/\/audit (.+)/, async (msg, match) => {
+    if (!msg.from) return
+
+    const adminId = msg.from.id
+    const chatId = msg.chat.id
+
+    // 🔒 admin only
+    if (!ADMINS.has(adminId)) {
+        await bot.sendMessage(chatId, '❌ Not authorized')
+        return
+    }
+
+    const targetId = Number(match?.[1])
+
+    if (!targetId) {
+        await bot.sendMessage(chatId, 'Usage: /audit <telegramUserId>')
+        return
+    }
+
+    const session = getSession(targetId)
+
+    if (!session.depositAddress || !session.tokenType) {
+        await bot.sendMessage(chatId, '❌ No active session found')
+        return
+    }
+
+    const depositPubkey = new PublicKey(session.depositAddress)
+
+    const mint =
+        session.tokenType === 'USDC' ? USDC_MINT : USDT_MINT
+
+    const ata = await (async () => {
+        const { getAssociatedTokenAddressSync } = await import('@solana/spl-token')
+        return getAssociatedTokenAddressSync(mint, depositPubkey)
+    })()
+
+    const balance = await getTokenBalance(connection, ata)
+
+    const expectedSSF = balance / 0.25
+    const credited = session.creditedSSF ?? 0
+    const owed = expectedSSF - credited
+
+    await bot.sendMessage(
+        chatId,
+        `
+    📊 *Audit Report*
+
+    👤 User: ${targetId}
+    💳 Deposit: \`${session.depositAddress}\`
+    🪙 Token: ${session.tokenType}
+
+    💰 Paid: ${balance}
+    🎯 Should receive: ${expectedSSF} SSF
+    ✅ Credited: ${credited} SSF
+    ⚠️ Owed: ${owed > 0 ? owed : 0} SSF
+
+    📍 Step: ${session.step}
+    `,
+        { parse_mode: 'Markdown' }
     )
 });
 
