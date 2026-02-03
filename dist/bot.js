@@ -117,7 +117,6 @@ bot.onText(/\/audit (.+)/, async (msg, match) => {
         return;
     const adminId = msg.from.id;
     const chatId = msg.chat.id;
-    // 🔒 admin only
     if (!ADMINS.has(adminId)) {
         await bot.sendMessage(chatId, '❌ Not authorized');
         return;
@@ -134,28 +133,24 @@ bot.onText(/\/audit (.+)/, async (msg, match) => {
     }
     const depositPubkey = new web3_js_1.PublicKey(session.depositAddress);
     const mint = session.tokenType === 'USDC' ? solana_1.USDC_MINT : solana_1.USDT_MINT;
-    const ata = await (async () => {
-        const { getAssociatedTokenAddressSync } = await Promise.resolve().then(() => __importStar(require('@solana/spl-token')));
-        return getAssociatedTokenAddressSync(mint, depositPubkey);
-    })();
+    const { getAssociatedTokenAddressSync } = await Promise.resolve().then(() => __importStar(require('@solana/spl-token')));
+    const ata = getAssociatedTokenAddressSync(mint, depositPubkey);
     const balance = await (0, solana_1.getTokenBalance)(solana_1.connection, ata);
-    const expectedSSF = balance / 0.25;
-    const credited = session.creditedSSF ?? 0;
-    const owed = expectedSSF - credited;
-    await bot.sendMessage(chatId, `
-    📊 *Audit Report*
+    const last = session.lastCheckedBalance ?? 0;
+    const deltaPaid = balance - last;
+    const ssfDue = deltaPaid > 0 ? deltaPaid / 0.25 : 0;
+    await bot.sendMessage(chatId, `📊 *Audit Report*
 
-    👤 User: ${targetId}
-    💳 Deposit: \`${session.depositAddress}\`
-    🪙 Token: ${session.tokenType}
+👤 User: ${targetId}
+💳 Deposit: \`${session.depositAddress}\`
+🪙 Token: ${session.tokenType}
 
-    💰 Paid: ${balance}
-    🎯 Should receive: ${expectedSSF} SSF
-    ✅ Credited: ${credited} SSF
-    ⚠️ Owed: ${owed > 0 ? owed : 0} SSF
+💰 Current deposit balance: ${balance}
+🧾 Last processed balance: ${last}
+⚠️ Pending payout: ${ssfDue} SSF
 
-    📍 Step: ${session.step}
-    `, { parse_mode: 'Markdown' });
+📍 Step: ${session.step}
+`, { parse_mode: 'Markdown' });
 });
 // Button handler
 bot.on('callback_query', async (query) => {

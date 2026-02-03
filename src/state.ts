@@ -17,7 +17,7 @@ export type Session = {
   amountUSD?: number
   payoutAddress?: string
 
-  creditedSSF?: number   // how much already sent
+  lastCheckedBalance?: number   // required for delta logic
 }
 
 // ----------------------------------------

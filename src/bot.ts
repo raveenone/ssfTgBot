@@ -106,65 +106,61 @@ bot.onText(/\/balance/, async (msg) => {
 });
 
 bot.onText(/\/audit (.+)/, async (msg, match) => {
-    if (!msg.from) return
+  if (!msg.from) return
 
-    const adminId = msg.from.id
-    const chatId = msg.chat.id
+  const adminId = msg.from.id
+  const chatId = msg.chat.id
 
-    // 🔒 admin only
-    if (!ADMINS.has(adminId)) {
-        await bot.sendMessage(chatId, '❌ Not authorized')
-        return
-    }
+  if (!ADMINS.has(adminId)) {
+    await bot.sendMessage(chatId, '❌ Not authorized')
+    return
+  }
 
-    const targetId = Number(match?.[1])
+  const targetId = Number(match?.[1])
 
-    if (!targetId) {
-        await bot.sendMessage(chatId, 'Usage: /audit <telegramUserId>')
-        return
-    }
+  if (!targetId) {
+    await bot.sendMessage(chatId, 'Usage: /audit <telegramUserId>')
+    return
+  }
 
-    const session = getSession(targetId)
+  const session = getSession(targetId)
 
-    if (!session.depositAddress || !session.tokenType) {
-        await bot.sendMessage(chatId, '❌ No active session found')
-        return
-    }
+  if (!session.depositAddress || !session.tokenType) {
+    await bot.sendMessage(chatId, '❌ No active session found')
+    return
+  }
 
-    const depositPubkey = new PublicKey(session.depositAddress)
+  const depositPubkey = new PublicKey(session.depositAddress)
 
-    const mint =
-        session.tokenType === 'USDC' ? USDC_MINT : USDT_MINT
+  const mint =
+    session.tokenType === 'USDC' ? USDC_MINT : USDT_MINT
 
-    const ata = await (async () => {
-        const { getAssociatedTokenAddressSync } = await import('@solana/spl-token')
-        return getAssociatedTokenAddressSync(mint, depositPubkey)
-    })()
+  const { getAssociatedTokenAddressSync } = await import('@solana/spl-token')
 
-    const balance = await getTokenBalance(connection, ata)
+  const ata = getAssociatedTokenAddressSync(mint, depositPubkey)
 
-    const expectedSSF = balance / 0.25
-    const credited = session.creditedSSF ?? 0
-    const owed = expectedSSF - credited
+  const balance = await getTokenBalance(connection, ata)
 
-    await bot.sendMessage(
-        chatId,
-        `
-    📊 *Audit Report*
+  const last = session.lastCheckedBalance ?? 0
+  const deltaPaid = balance - last
+  const ssfDue = deltaPaid > 0 ? deltaPaid / 0.25 : 0
 
-    👤 User: ${targetId}
-    💳 Deposit: \`${session.depositAddress}\`
-    🪙 Token: ${session.tokenType}
+  await bot.sendMessage(
+    chatId,
+`📊 *Audit Report*
 
-    💰 Paid: ${balance}
-    🎯 Should receive: ${expectedSSF} SSF
-    ✅ Credited: ${credited} SSF
-    ⚠️ Owed: ${owed > 0 ? owed : 0} SSF
+👤 User: ${targetId}
+💳 Deposit: \`${session.depositAddress}\`
+🪙 Token: ${session.tokenType}
 
-    📍 Step: ${session.step}
-    `,
-        { parse_mode: 'Markdown' }
-    )
+💰 Current deposit balance: ${balance}
+🧾 Last processed balance: ${last}
+⚠️ Pending payout: ${ssfDue} SSF
+
+📍 Step: ${session.step}
+`,
+    { parse_mode: 'Markdown' }
+  )
 });
 
 

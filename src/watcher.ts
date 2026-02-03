@@ -1,7 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js'
-import { getSession } from './state'
 import { deriveUserKeypair, getUserATAs, getTokenBalance, sendSSF, sweepToTreasury, USDC_MINT, USDT_MINT } from './solana'
-import { getAllSessions, saveSession  } from './state'
+import { getAllSessions, saveSession } from './state'
 
 const PRICE_PER_SSF = 0.25
 
@@ -12,55 +11,51 @@ export function startWatcher(connection: Connection) {
     console.log('sessions loaded:', getAllSessions().length)
 
     for (const [userId, session] of getAllSessions()) {
-        // allow deposits anytime after payout address is known
-        if (!session.tokenType) continue
-        if (!session.payoutAddress) continue
+      if (!session.tokenType) continue
+      if (!session.payoutAddress) continue
 
-        const userKeypair = deriveUserKeypair(userId)
-        const atas = getUserATAs(userKeypair.publicKey)
+      const userKeypair = deriveUserKeypair(userId)
+      const atas = getUserATAs(userKeypair.publicKey)
 
-        const ata =
+      const ata =
         session.tokenType === 'USDC' ? atas.usdc : atas.usdt
 
-        const balance = await getTokenBalance(connection, ata)
+      const balance = await getTokenBalance(connection, ata)
 
-        // ⭐ total paid by user
-        const totalPaid = balance
+      // ✅ DELTA LOGIC (correct with sweeping)
+      const last = session.lastCheckedBalance ?? 0
+      const deltaUSD = balance - last
 
-        // ⭐ total SSF they SHOULD have
-        const expectedSSF = totalPaid / PRICE_PER_SSF
-
-        // ⭐ already credited
-        const alreadySent = session.creditedSSF ?? 0
-
-        // ⭐ what we still owe
-        const deltaSSF = expectedSSF - alreadySent
-
-        if (deltaSSF > 0.000001) {
-        console.log(
-            `💰 Paying ${deltaSSF} SSF to user ${userId}`
-        )
-
-        await sendSSF(
-            new PublicKey(session.payoutAddress),
-            deltaSSF
-        )
-
-        // sweep funds to treasury
-        await sweepToTreasury(
-            userKeypair,
-            session.tokenType === 'USDC' ? USDC_MINT : USDT_MINT,
-            6
-        )
-
-        session.creditedSSF = expectedSSF
-        session.step = 'idle'
-
+      if (deltaUSD <= 0) {
+        session.lastCheckedBalance = balance
         saveSession(userId, session)
-        }
+        continue
+      }
+
+      const deltaSSF = deltaUSD / PRICE_PER_SSF
+
+      console.log(
+        `💰 Deposit ${deltaUSD} ${session.tokenType} → sending ${deltaSSF} SSF to user ${userId}`
+      )
+
+      await sendSSF(
+        new PublicKey(session.payoutAddress),
+        deltaSSF
+      )
+
+      await sweepToTreasury(
+        userKeypair,
+        session.tokenType === 'USDC' ? USDC_MINT : USDT_MINT,
+        6
+      )
+
+      session.lastCheckedBalance = balance
+      session.step = 'idle'
+
+      saveSession(userId, session)
     }
   }
 
-  check() // 🔥 immediate run
+  check()
   setInterval(check, 15_000)
 }
