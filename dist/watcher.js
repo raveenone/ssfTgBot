@@ -12,27 +12,31 @@ function startWatcher(connection) {
         for (const [userId, session] of (0, state_1.getAllSessions)()) {
             if (session.step !== 'awaiting_payment')
                 continue;
-            if (session.credited)
-                continue;
             if (!session.tokenType)
+                continue;
+            if (!session.payoutAddress)
                 continue;
             const userKeypair = (0, solana_1.deriveUserKeypair)(userId);
             const atas = (0, solana_1.getUserATAs)(userKeypair.publicKey);
             const ata = session.tokenType === 'USDC' ? atas.usdc : atas.usdt;
             const balance = await (0, solana_1.getTokenBalance)(connection, ata);
-            const last = session.lastCheckedBalance ?? 0;
-            if (balance > last) {
-                const delta = balance - last;
-                const ssfAmount = delta / PRICE_PER_SSF;
-                console.log(`💰 Deposit detected for user ${userId}: ${delta} ${session.tokenType}`);
-                await (0, solana_1.sendSSF)(new web3_js_1.PublicKey(session.payoutAddress), ssfAmount);
+            // ⭐ total paid by user
+            const totalPaid = balance;
+            // ⭐ total SSF they SHOULD have
+            const expectedSSF = totalPaid / PRICE_PER_SSF;
+            // ⭐ already credited
+            const alreadySent = session.creditedSSF ?? 0;
+            // ⭐ what we still owe
+            const deltaSSF = expectedSSF - alreadySent;
+            if (deltaSSF > 0.000001) {
+                console.log(`💰 Paying ${deltaSSF} SSF to user ${userId}`);
+                await (0, solana_1.sendSSF)(new web3_js_1.PublicKey(session.payoutAddress), deltaSSF);
+                // sweep funds to treasury
                 await (0, solana_1.sweepToTreasury)(userKeypair, session.tokenType === 'USDC' ? solana_1.USDC_MINT : solana_1.USDT_MINT, 6);
-                session.credited = true;
+                session.creditedSSF = expectedSSF;
                 session.step = 'idle';
                 (0, state_1.saveSession)(userId, session);
             }
-            session.lastCheckedBalance = balance;
-            (0, state_1.saveSession)(userId, session);
         }
     }
     check(); // 🔥 immediate run

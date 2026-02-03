@@ -6,8 +6,7 @@ export type Session = {
     tokenType?: TokenType;
     amountUSD?: number;
     payoutAddress?: string;
-    credited?: boolean;
-    lastCheckedBalance?: number;
+    creditedSSF?: number;
 };
 export declare function getSession(userId: number): Session;
 export declare function saveSession(userId: number, session: Session): void;

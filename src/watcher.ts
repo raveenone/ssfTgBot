@@ -12,42 +12,52 @@ export function startWatcher(connection: Connection) {
     console.log('sessions loaded:', getAllSessions().length)
 
     for (const [userId, session] of getAllSessions()) {
-      if (session.step !== 'awaiting_payment') continue
-      if (session.credited) continue
-      if (!session.tokenType) continue
+        if (session.step !== 'awaiting_payment') continue
+        if (!session.tokenType) continue
+        if (!session.payoutAddress) continue
 
-      const userKeypair = deriveUserKeypair(userId)
-      const atas = getUserATAs(userKeypair.publicKey)
+        const userKeypair = deriveUserKeypair(userId)
+        const atas = getUserATAs(userKeypair.publicKey)
 
-      const ata =
+        const ata =
         session.tokenType === 'USDC' ? atas.usdc : atas.usdt
 
-      const balance = await getTokenBalance(connection, ata)
-      const last = session.lastCheckedBalance ?? 0
+        const balance = await getTokenBalance(connection, ata)
 
-      if (balance > last) {
-        const delta = balance - last
-        const ssfAmount = delta / PRICE_PER_SSF
+        // ⭐ total paid by user
+        const totalPaid = balance
 
+        // ⭐ total SSF they SHOULD have
+        const expectedSSF = totalPaid / PRICE_PER_SSF
+
+        // ⭐ already credited
+        const alreadySent = session.creditedSSF ?? 0
+
+        // ⭐ what we still owe
+        const deltaSSF = expectedSSF - alreadySent
+
+        if (deltaSSF > 0.000001) {
         console.log(
-          `💰 Deposit detected for user ${userId}: ${delta} ${session.tokenType}`
+            `💰 Paying ${deltaSSF} SSF to user ${userId}`
         )
 
-        await sendSSF(new PublicKey(session.payoutAddress!), ssfAmount)
+        await sendSSF(
+            new PublicKey(session.payoutAddress),
+            deltaSSF
+        )
 
+        // sweep funds to treasury
         await sweepToTreasury(
-          userKeypair,
-          session.tokenType === 'USDC' ? USDC_MINT : USDT_MINT,
-          6
+            userKeypair,
+            session.tokenType === 'USDC' ? USDC_MINT : USDT_MINT,
+            6
         )
 
-        session.credited = true
+        session.creditedSSF = expectedSSF
         session.step = 'idle'
-        saveSession(userId, session)
-      }
 
-      session.lastCheckedBalance = balance
-      saveSession(userId, session)
+        saveSession(userId, session)
+        }
     }
   }
 

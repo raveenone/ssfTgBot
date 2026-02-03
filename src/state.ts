@@ -17,8 +17,7 @@ export type Session = {
   amountUSD?: number
   payoutAddress?: string
 
-  credited?: boolean
-  lastCheckedBalance?: number
+  creditedSSF?: number   // how much already sent
 }
 
 // ----------------------------------------
