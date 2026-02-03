@@ -10,8 +10,7 @@ function startWatcher(connection) {
     async function check() {
         console.log('sessions loaded:', (0, state_1.getAllSessions)().length);
         for (const [userId, session] of (0, state_1.getAllSessions)()) {
-            if (session.step !== 'awaiting_payment')
-                continue;
+            // allow deposits anytime after payout address is known
             if (!session.tokenType)
                 continue;
             if (!session.payoutAddress)
